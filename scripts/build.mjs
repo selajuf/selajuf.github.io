@@ -17,17 +17,17 @@ const escape = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
 
-function asset(file, project, kind) {
-  const folder = kind === 'video' ? 'videos' : 'images';
-  const extension = kind === 'video' ? 'mp4' : 'webp';
-  assert.match(file, new RegExp(`^cases/${project.slug}/${folder}/[a-z0-9_-]+\\.${extension}$`));
+function asset(file, project) {
+  assert.match(file, new RegExp(`^cases/${project.slug}/images/[a-z0-9_-]+\\.webp$`));
   const path = resolve(root, file);
   assert.ok(existsSync(path), `Не найден материал: ${file}`);
   assert.ok(realpathSync(path).startsWith(realpathSync(root) + '/'), 'Материал должен находиться в репозитории');
   return path;
 }
 
-assert.equal(projects.length, 7, 'Ожидаются семь проверенных кейсов');
+assert.equal(projects.length, 6, 'Ожидаются шесть проверенных кейсов');
+assert.deepEqual(categories.slice(1).map(([category]) => projects.filter((project) => project.category === category).length), [3, 2, 1]);
+assert.equal(projects.flatMap((project) => project.gallery).length, 10, 'Ожидаются десять изображений');
 assert.equal(new Set(projects.map((project) => project.slug)).size, projects.length, 'Slug должны быть уникальны');
 for (const field of ['owner', 'title', 'description']) assert.ok(typeof content[field] === 'string' && content[field].trim());
 for (const project of projects) {
@@ -42,15 +42,10 @@ for (const project of projects) {
     assert.ok(project[field].every((value) => typeof value === 'string' && value.trim()));
   }
   for (const media of project.gallery) {
-    asset(media.file, project, 'image');
+    asset(media.file, project);
     for (const field of ['alt', 'caption', 'kind']) assert.ok(typeof media[field] === 'string' && media[field].trim());
   }
-  if (project.video) {
-    assert.equal(project.slug, 'product-visualization', 'Видео разрешено только в собственной визуализации');
-    asset(project.video.file, project, 'video');
-    asset(project.video.poster, project, 'image');
-    assert.ok(typeof project.video.caption === 'string' && project.video.caption.trim());
-  }
+  assert.ok(!project.video, 'Портфолио не содержит публикационных видео');
 }
 
 function imageSize(file) {
@@ -150,7 +145,6 @@ function card(project, index) {
         <h3 id="title-${project.slug}">${escape(project.title)}</h3>
         <p class="project-short">${escape(project.shortTitle)}</p>
         <p class="project-summary">${escape(project.summary)}</p>
-        <ul class="tags" aria-label="Темы проекта">${project.tags.map((tag) => `<li>${escape(tag)}</li>`).join('')}</ul>
         <p class="project-status"><span aria-hidden="true"></span>${escape(project.status)}</p>
       </div>
     </a>
@@ -223,11 +217,9 @@ function detail(project, index) {
         <p class="eyebrow">${escape(project.number)} / ${escape(project.categoryLabel)}</p>
         <h1 id="case-title">${escape(project.title)}</h1>
         <p class="case-summary">${escape(project.summary)}</p>
-        <ul class="tags" aria-label="Темы проекта">${project.tags.map((tag) => `<li>${escape(tag)}</li>`).join('')}</ul>
-        <aside class="evidence" aria-label="Статус и ограничения"><p class="evidence-status">${escape(project.status)}</p><p>${escape(project.boundary)}</p></aside>
       </section>
       <section class="case-gallery" aria-labelledby="gallery-title">
-        <div class="section-heading"><h2 id="gallery-title">Материалы проекта</h2><p class="eyebrow">Изображения можно увеличить ↗</p></div>
+        <div class="section-heading"><h2 id="gallery-title">Материалы проекта</h2></div>
         <div class="gallery gallery--${project.category} ${project.gallery.length === 1 ? 'gallery--single' : ''} ${project.slug === 'video-factory' ? 'gallery--wide' : ''}">
           ${project.gallery.map((media, galleryIndex) => `<figure>
             <a class="gallery-link" href="${prefix}${escape(media.file)}" data-lightbox aria-haspopup="dialog" aria-label="Увеличить: ${escape(media.alt)}">
@@ -236,7 +228,6 @@ function detail(project, index) {
             <figcaption><span class="media-kind">${escape(media.kind)}</span><p>${escape(media.caption)}</p></figcaption>
           </figure>`).join('\n')}
         </div>
-        ${project.video ? `<figure class="video-figure"><video controls playsinline preload="metadata" poster="${prefix}${escape(project.video.poster)}" aria-label="${escape(project.video.caption)}"><source src="${prefix}${escape(project.video.file)}" type="video/mp4">Ваш браузер не поддерживает видео. <a href="${prefix}${escape(project.video.file)}">Скачать MP4</a></video><figcaption><span class="media-kind">MP4 / Без звука</span><p>${escape(project.video.caption)}</p></figcaption></figure>` : ''}
       </section>
       <section class="case-story" aria-labelledby="story-title"><div><p class="eyebrow">Разбор проекта</p><h2 id="story-title">От задачи<br>к результату.</h2></div>
         <dl class="case-facts"><div><dt>Задача</dt><dd>${escape(project.task)}</dd></div><div><dt>На входе</dt><dd>${escape(project.input)}</dd></div><div><dt>Что происходит</dt><dd><ul>${project.actions.map((action) => `<li>${escape(action)}</li>`).join('')}</ul></dd></div><div class="output-fact"><dt>На выходе</dt><dd>${escape(project.output)}</dd></div></dl>

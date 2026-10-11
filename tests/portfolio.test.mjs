@@ -38,19 +38,34 @@ test('Сборка воспроизводима и не изменяет про�
   for (const [file, hash] of before) assert.equal(digest(file), hash, `Изменен исходный материал: ${file}`);
 });
 
-test('Ровно семь уникальных кейсов, 13 изображений и одно разрешенное видео', () => {
-  assert.equal(projects.length, 7);
-  assert.equal(new Set(projects.map((project) => project.slug)).size, 7);
-  assert.equal(new Set(projects.map((project) => project.number)).size, 7);
+test('Ровно шесть уникальных кейсов, 10 изображений и ни одного MP4', () => {
+  assert.equal(projects.length, 6);
+  assert.equal(new Set(projects.map((project) => project.slug)).size, 6);
+  assert.equal(new Set(projects.map((project) => project.number)).size, 6);
   assert.deepEqual(projects.map((project) => project.slug), [
-    'executive-assistant', 'meeting-assistant', 'report-control', 'telegram-miniapp', 'qr-quest', 'video-factory', 'product-visualization',
+    'executive-assistant', 'meeting-assistant', 'report-control', 'telegram-miniapp', 'qr-quest', 'video-factory',
   ]);
-  assert.deepEqual(projects.map((project) => project.category), ['agents', 'agents', 'agents', 'apps', 'apps', 'video', 'video']);
-  assert.equal(projects.flatMap((project) => project.gallery).length, 13);
-  assert.deepEqual(projects.filter((project) => project.video).map((project) => project.slug), ['product-visualization']);
+  assert.deepEqual(projects.map((project) => project.category), ['agents', 'agents', 'agents', 'apps', 'apps', 'video']);
+  assert.equal(projects.flatMap((project) => project.gallery).length, 10);
+  assert.deepEqual(projects.filter((project) => project.video), []);
   const mediaFiles = filesIn('cases').filter((file) => /\.(webp|mp4)$/.test(file));
-  assert.equal(mediaFiles.filter((file) => file.endsWith('.webp')).length, 13);
-  assert.equal(mediaFiles.filter((file) => file.endsWith('.mp4')).length, 1);
+  assert.equal(mediaFiles.filter((file) => file.endsWith('.webp')).length, 10);
+  assert.equal(mediaFiles.filter((file) => file.endsWith('.mp4')).length, 0);
+});
+
+test('Удаленные блоки, подсказка и кейс отсутствуют на всех публикационных страницах', () => {
+  assert.ok(!existsSync(join(root, 'cases/product-visualization')));
+  const generatedPages = ['index.html', '404.html', ...filesIn('cases').filter((file) => file.endsWith('.html'))];
+  assert.deepEqual(new Set(generatedPages), new Set(pages));
+  for (const page of generatedPages) {
+    const html = read(page);
+    assert.doesNotMatch(html, /class="[^"]*\b(?:evidence|tags)\b[^"]*"/);
+    assert.ok(!html.includes('Изображения можно увеличить ↗'), page);
+    assert.ok(!html.includes('product-visualization'), page);
+    assert.ok(!html.includes('Товар в 3D: рендеры и видео'), page);
+  }
+  assert.ok(!read('sitemap.xml').includes('product-visualization'));
+  assert.doesNotMatch(read('assets/site.css'), /\.(?:evidence|tags)\b|product-visualization|video-figure/);
 });
 
 test('Все локальные href, src, poster, CSS-ресурсы и якоря ведут к существующим файлам', () => {
@@ -80,39 +95,32 @@ test('Все локальные href, src, poster, CSS-ресурсы и яко�
     assert.ok(existsSync(resolve(root, 'assets', match[1])), `Не найден CSS-ресурс: ${match[1]}`);
     checked++;
   }
-  assert.ok(checked > 150, 'Проверка должна охватить ресурсы всех страниц');
+  assert.equal(checked, 148, 'Проверка должна охватить все ссылки и ресурсы шести кейсов, главной и 404');
 });
 
-test('Весь проверенный текст, подписи, типы, статусы и ограничения сохранены дословно', () => {
+test('Описания, подписи, типы и статусы карточек сохранены дословно', () => {
   const home = read('index.html');
   assert.ok(home.includes(escape(owner)) && home.includes(escape(title)));
   let previousPosition = -1;
   for (const project of projects) {
     const html = read(`cases/${project.slug}/index.html`);
-    for (const value of [project.title, project.summary, project.status, project.task, project.input, project.output, project.boundary, ...project.actions, ...project.flow, ...project.tags]) {
+    for (const value of [project.title, project.summary, project.task, project.input, project.output, ...project.actions, ...project.flow]) {
       assert.ok(html.includes(escape(value)), `${project.slug}: отсутствует ${value}`);
     }
     assert.ok(home.includes(escape(project.status)));
     const position = home.indexOf(`id="title-${project.slug}"`);
     assert.ok(position > previousPosition, 'Порядок главной должен повторять JSON');
     previousPosition = position;
-    const evidence = html.match(/<aside class="evidence"[\s\S]*?<\/aside>/)?.[0];
-    assert.ok(evidence?.includes(escape(project.status)) && evidence.includes(escape(project.boundary)));
-    assert.ok(!evidence.includes('hidden') && !evidence.includes('<details'));
     for (const media of project.gallery) {
       for (const value of [media.alt, media.caption, media.kind]) assert.ok(html.includes(escape(value)));
       assert.ok(html.includes(`href="../../${media.file}" data-lightbox`));
+      assert.ok(html.includes(`aria-label="Увеличить: ${escape(media.alt)}"`));
     }
     assert.match(html, /<ol class="process-flow">/);
     assert.match(html, /<ul><li>/);
     assert.match(html, /rel="prev"/);
     assert.match(html, /rel="next"/);
-    if (project.video) {
-      assert.match(html, /<video controls playsinline preload="metadata"/);
-      assert.ok(html.includes(escape(project.video.caption)));
-      assert.ok(html.includes(`poster="../../${project.video.poster}"`));
-      assert.ok(!/<video[^>]*autoplay/.test(html));
-    } else assert.ok(!html.includes('<video'));
+    assert.ok(!html.includes('<video'));
   }
 });
 
@@ -126,7 +134,7 @@ test('SEO, карта сайта, восстановление 404 и self-hoste
     assert.match(html, /<link rel="icon"/);
   }
   const sitemap = read('sitemap.xml');
-  assert.equal([...sitemap.matchAll(/<loc>/g)].length, 8);
+  assert.equal([...sitemap.matchAll(/<loc>/g)].length, 7);
   for (const project of projects) assert.ok(sitemap.includes(`${siteOrigin}/cases/${project.slug}/`));
   assert.ok(!sitemap.includes('404.html'));
   assert.ok(read('robots.txt').includes(`Sitemap: ${siteOrigin}/sitemap.xml`));
@@ -203,18 +211,19 @@ test('Фильтры меняют видимость, aria-pressed, счетчи
   const { buttons, cards, result, filters, window } = fixture;
   assert.equal(filters.hidden, false);
   assert.deepEqual(cards.filter((card) => !card.hidden).map((card) => card.dataset.category), ['apps', 'apps']);
-  assert.equal(result.textContent, 'Показано: 2 из 7');
+  assert.equal(result.textContent, 'Показано: 2 из 6');
   assert.equal(buttons[2].getAttribute('aria-pressed'), 'true');
   buttons[1].emit('click');
   assert.equal(cards.filter((card) => !card.hidden).length, 3);
-  assert.equal(result.textContent, 'Показано: 3 из 7');
+  assert.equal(result.textContent, 'Показано: 3 из 6');
   assert.equal(new URL(window.location.href).searchParams.get('filter'), 'agents');
   assert.equal(new URL(window.location.href).hash, '#works');
   assert.equal(buttons.filter((button) => button.getAttribute('aria-pressed') === 'true').length, 1);
   buttons[3].emit('click');
-  assert.equal(cards.filter((card) => !card.hidden).length, 2);
+  assert.equal(cards.filter((card) => !card.hidden).length, 1);
+  assert.equal(result.textContent, 'Показано: 1 из 6');
   buttons[0].emit('click');
-  assert.equal(cards.filter((card) => !card.hidden).length, 7);
+  assert.equal(cards.filter((card) => !card.hidden).length, 6);
   assert.equal(new URL(window.location.href).searchParams.has('filter'), false);
   window.location.href = `${siteOrigin}/?filter=apps`;
   window.emit('popstate');
@@ -223,10 +232,10 @@ test('Фильтры меняют видимость, aria-pressed, счетчи
 
 test('Неизвестный фильтр показывает все проекты; без JavaScript контент остается доступен', () => {
   const { cards, buttons } = filterFixture(`${siteOrigin}/?filter=invalid`);
-  assert.equal(cards.filter((card) => !card.hidden).length, 7);
+  assert.equal(cards.filter((card) => !card.hidden).length, 6);
   assert.equal(buttons[0].getAttribute('aria-pressed'), 'true');
   const html = read('index.html');
-  assert.equal([...html.matchAll(/<article class="project[^>]+data-category=/g)].length, 7);
+  assert.equal([...html.matchAll(/<article class="project[^>]+data-category=/g)].length, 6);
   assert.ok(!/<article[^>]+\bhidden\b/.test(html));
   assert.ok(html.includes('class="filters" role="group" aria-label="Категория работ" hidden'));
   assert.ok(html.includes('<noscript>'));
