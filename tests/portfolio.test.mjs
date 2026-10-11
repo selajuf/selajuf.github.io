@@ -17,6 +17,22 @@ const escape = (value) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp
 const decode = (value) => value.replace(/&(amp|lt|gt|quot|#39);/g, (match, entity) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[entity]);
 const digest = (path) => createHash('sha256').update(readFileSync(join(root, path))).digest('hex');
 
+test('Главная начинается с обычного h1 Работы без маркетингового intro', () => {
+  const html = read('index.html');
+  assert.match(html, /<main id="main">\s*<section class="works wrap"/);
+  assert.match(html, /<h1 id="works-title">Работы<\/h1>/);
+  for (const text of ['intro-title', 'Из повседневных задач', 'в понятный процесс.', 'Портфолио / ИИ и цифровые продукты', 'Проекты, прототипы и примеры интерфейсов.', 'От входящего сообщения до документа, заявки и видео.', 'Обсудить вашу задачу']) assert.ok(!html.includes(text), text);
+});
+
+test('Удаленные элементы отсутствуют на всех страницах и в стилях, включая адаптивные правила', () => {
+  const removed = /(?<![\w-])(?:intro|intro-title|intro-bottom|lime-line|heading-count|work-count|filter-result|preview-label|preview-open|project-meta|project-arrow|project-short|project-status|media-kind|lightbox-caption|case-process|process-title|process-flow|flow-arrow)(?![\w-])|figcaption/;
+  for (const page of pages) assert.doesNotMatch(read(page), removed, page);
+  assert.doesNotMatch(read('assets/site.css'), removed);
+  assert.match(read('assets/site.css'), /\.works h1\s*\{[^}]*font-size: 32px/);
+  assert.match(read('assets/site.css'), /\.project-card:hover/);
+  assert.match(read('assets/site.css'), /:focus-visible/);
+});
+
 function filesIn(directory) {
   return readdirSync(join(root, directory)).flatMap((name) => {
     const path = join(directory, name);
@@ -95,32 +111,70 @@ test('Все локальные href, src, poster, CSS-ресурсы и яко�
     assert.ok(existsSync(resolve(root, 'assets', match[1])), `Не найден CSS-ресурс: ${match[1]}`);
     checked++;
   }
-  assert.equal(checked, 148, 'Проверка должна охватить все ссылки и ресурсы шести кейсов, главной и 404');
+  assert.equal(checked, 147, 'Проверка охватывает все ссылки и ресурсы; CTA удален вместе с intro');
 });
 
-test('Описания, подписи, типы и статусы карточек сохранены дословно', () => {
+test('Карточки содержат только изображения, заголовок и один дословный summary', () => {
+  const cards = [...read('index.html').matchAll(/<article\b[\s\S]*?<\/article>/g)].map((match) => match[0]);
+  assert.equal(cards.length, projects.length);
+  for (const [index, project] of projects.entries()) {
+    const card = cards[index];
+    assert.doesNotMatch(card, /preview-label|preview-open|project-meta|project-arrow|project-short|project-status|Смотреть кейс|Открыть кейс/);
+    assert.match(card, new RegExp(`href="\\./cases/${project.slug}/" aria-labelledby="title-${project.slug}"`));
+    assert.ok(card.includes(`<h3 id="title-${project.slug}">${escape(project.title)}</h3>`));
+    assert.deepEqual([...card.matchAll(/<p\b[^>]*>(.*?)<\/p>/g)].map((match) => match[1]), [escape(project.summary)]);
+    const text = card.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    assert.equal(text, `${escape(project.title)} ${escape(project.summary)}`);
+    assert.equal([...card.matchAll(/<img\b/g)].length, project.category === 'apps' || project.slug === 'meeting-assistant' ? 2 : 1);
+  }
+});
+
+test('Описания и доступные изображения сохранены дословно', () => {
   const home = read('index.html');
   assert.ok(home.includes(escape(owner)) && home.includes(escape(title)));
   let previousPosition = -1;
   for (const project of projects) {
     const html = read(`cases/${project.slug}/index.html`);
-    for (const value of [project.title, project.summary, project.task, project.input, project.output, ...project.actions, ...project.flow]) {
+    for (const value of [project.title, project.summary, project.task, project.input, project.output, ...project.actions]) {
       assert.ok(html.includes(escape(value)), `${project.slug}: отсутствует ${value}`);
     }
-    assert.ok(home.includes(escape(project.status)));
     const position = home.indexOf(`id="title-${project.slug}"`);
     assert.ok(position > previousPosition, 'Порядок главной должен повторять JSON');
     previousPosition = position;
     for (const media of project.gallery) {
-      for (const value of [media.alt, media.caption, media.kind]) assert.ok(html.includes(escape(value)));
+      assert.ok(html.includes(`alt="${escape(media.alt)}"`));
       assert.ok(html.includes(`href="../../${media.file}" data-lightbox`));
       assert.ok(html.includes(`aria-label="Увеличить: ${escape(media.alt)}"`));
     }
-    assert.match(html, /<ol class="process-flow">/);
     assert.match(html, /<ul><li>/);
     assert.match(html, /rel="prev"/);
     assert.match(html, /rel="next"/);
     assert.ok(!html.includes('<video'));
+  }
+});
+
+test('Повторный процесс удален; подход и разбор проекта сохранены', () => {
+  for (const page of pages) assert.doesNotMatch(read(page), /case-process|process-title|process-flow|flow-arrow|Процесс в четырех шагах/);
+  assert.doesNotMatch(read('assets/site.css'), /case-process|process-flow|flow-arrow/);
+  const sectionHash = (html, pattern) => {
+    const section = html.match(pattern)?.[0];
+    assert.ok(section);
+    return createHash('sha256').update(section).digest('hex');
+  };
+  assert.equal(sectionHash(read('index.html'), /<section class="approach wrap"[\s\S]*?<\/section>/), '8dde99a41209748f2a3306805d44079a8a7db98ff73cecd24e81f7160d4d95ce');
+  assert.match(read('assets/site.css'), /\.step-number\s*\{/);
+  assert.match(read('assets/site.css'), /\.eyebrow, \.step-number\s*\{[^}]*font-family:/);
+  const storyHashes = [
+    '77aa131b656c1aa5817ac689cdba6774a012b31d2c6de87912f2f69ab32576b7',
+    '5b059373197082b9a8e4279a6ee34de35b9defd692760df3823e2232f85e71c2',
+    '81eab29e6b6395308cc0bffd32d950a8fd897f08265f79a1699a0935385101eb',
+    '22575cc285b4225ea24435806acfe0d7dade5a2f72517b12a18b264adafa666c',
+    '96dc966ea14add4326038223f4333c5476d3422e9d4e3f457a1a0db4f53db707',
+    'c873f510d9ae0c23ad8fca88e587d8314884e807984fd3693ce7693c9a21311b',
+  ];
+  for (const [index, project] of projects.entries()) {
+    const path = `cases/${project.slug}/index.html`;
+    assert.equal(sectionHash(read(path), /<section class="case-story"[\s\S]*?<\/section>/), storyHashes[index], project.slug);
   }
 });
 
@@ -191,7 +245,6 @@ function node({ dataset = {}, textContent = '', href = '', alt = '' } = {}) {
 function filterFixture(url = `${siteOrigin}/`) {
   const buttons = ['all', 'agents', 'apps', 'video'].map((filter) => node({ dataset: { filter } }));
   const cards = projects.map((project) => node({ dataset: { category: project.category } }));
-  const result = node();
   const filters = node();
   filters.hidden = true;
   filters.querySelectorAll = () => buttons;
@@ -199,29 +252,34 @@ function filterFixture(url = `${siteOrigin}/`) {
   window.location = { href: url };
   window.history = { pushState(_state, _unused, updated) { window.location.href = String(updated); } };
   const document = {
-    querySelector(selector) { return ({ '.filters': filters, '#filter-result': result })[selector] ?? null; },
+    querySelector(selector) { return selector === '.filters' ? filters : null; },
     querySelectorAll(selector) { return selector === '.project[data-category]' ? cards : []; },
   };
   runInNewContext(read('assets/site.js'), { document, window, URL });
-  return { buttons, cards, result, filters, window };
+  return { buttons, cards, filters, window };
 }
 
-test('Фильтры меняют видимость, aria-pressed, счетчик и URL; работают прямые ссылки и Back', () => {
+test('Фильтры без счетчиков меняют видимость, aria-pressed и URL; работают прямые ссылки и Back', () => {
+  const html = read('index.html');
+  assert.ok(!html.includes('filter-result'));
+  assert.ok(!html.includes('heading-count'));
+  assert.ok(!html.includes('work-count'));
+  assert.ok(!html.includes('Показано:'));
+  assert.ok(!html.includes('Сценарии · интерфейсы · результат'));
+  const labels = ['Все работы', 'Агенты и процессы', 'Приложения', 'Видео и контент'];
+  assert.deepEqual([...html.matchAll(/<button[^>]*data-filter=[^>]*>(.*?)<\/button>/g)].map((match) => match[1]), labels);
   const fixture = filterFixture(`${siteOrigin}/?filter=apps#works`);
-  const { buttons, cards, result, filters, window } = fixture;
+  const { buttons, cards, filters, window } = fixture;
   assert.equal(filters.hidden, false);
   assert.deepEqual(cards.filter((card) => !card.hidden).map((card) => card.dataset.category), ['apps', 'apps']);
-  assert.equal(result.textContent, 'Показано: 2 из 6');
   assert.equal(buttons[2].getAttribute('aria-pressed'), 'true');
   buttons[1].emit('click');
   assert.equal(cards.filter((card) => !card.hidden).length, 3);
-  assert.equal(result.textContent, 'Показано: 3 из 6');
   assert.equal(new URL(window.location.href).searchParams.get('filter'), 'agents');
   assert.equal(new URL(window.location.href).hash, '#works');
   assert.equal(buttons.filter((button) => button.getAttribute('aria-pressed') === 'true').length, 1);
   buttons[3].emit('click');
   assert.equal(cards.filter((card) => !card.hidden).length, 1);
-  assert.equal(result.textContent, 'Показано: 1 из 6');
   buttons[0].emit('click');
   assert.equal(cards.filter((card) => !card.hidden).length, 6);
   assert.equal(new URL(window.location.href).searchParams.has('filter'), false);
@@ -246,10 +304,9 @@ function galleryFixture(length = 3, supported = true) {
   const links = Array.from({ length }, (_value, index) => {
     const link = node({ href: `${siteOrigin}/cases/example/images/${index}.webp` });
     link.querySelector = () => node({ alt: `Изображение ${index}` });
-    link.closest = () => ({ querySelector(selector) { return node({ textContent: selector === '.media-kind' ? 'Экран приложения' : `Подпись ${index}` }); } });
     return link;
   });
-  const controls = Object.fromEntries(['.lightbox-image', '#lightbox-caption', '.original-link', '.lightbox-count', '.lightbox-stage', '[data-prev]', '[data-next]', '[data-close]'].map((selector) => [selector, node()]));
+  const controls = Object.fromEntries(['.lightbox-image', '.original-link', '.lightbox-count', '.lightbox-stage', '[data-prev]', '[data-next]', '[data-close]'].map((selector) => [selector, node()]));
   const dialog = node();
   dialog.querySelector = (selector) => controls[selector];
   dialog.open = false;
@@ -265,14 +322,21 @@ function galleryFixture(length = 3, supported = true) {
   return { links, controls, dialog, document };
 }
 
-test('Просмотр изображений: оригинал, подписи, стрелки, прокрутка, закрытие и возврат фокуса', () => {
+test('Просмотр изображений без подписей: оригинал, alt, стрелки, прокрутка, закрытие и возврат фокуса', () => {
+  for (const page of pages) {
+    const html = read(page);
+    assert.doesNotMatch(html, /figcaption|media-kind|lightbox-caption/);
+    // Alt остается дословным, даже если в нем встречается название типа материала.
+    const visible = html.replace(/<[^>]*>/g, '');
+    for (const label of ['Демонстрация сценария', 'Демо-сценарий', 'Рабочий прототип', 'Клиентская поставка', 'Постановочный сценарий', ...projects.flatMap((project) => project.gallery.map((media) => media.caption))]) assert.ok(!visible.includes(escape(label)), `${page}: ${label}`);
+  }
+  assert.doesNotMatch(read('assets/site.js'), /lightbox-caption|media-kind|figcaption|\.closest\(/);
   const { links, controls, dialog, document } = galleryFixture();
   assert.equal(links[1].emit('click').prevented, true);
   assert.equal(dialog.open, true);
   assert.equal(document.documentElement.classList.contains('lightbox-open'), true);
   assert.equal(controls['.lightbox-image'].src, links[1].href);
   assert.equal(controls['.lightbox-image'].alt, 'Изображение 1');
-  assert.equal(controls['#lightbox-caption'].textContent, 'Экран приложения · Подпись 1');
   assert.equal(controls['.original-link'].href, links[1].href);
   assert.equal(controls['.lightbox-count'].textContent, '2 / 3');
   assert.equal(controls['.lightbox-stage'].scrollTop, 0);

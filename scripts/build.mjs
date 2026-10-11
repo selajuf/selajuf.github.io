@@ -128,11 +128,9 @@ ${body}
 function preview(project, index) {
   const media = project.gallery.slice(0, project.category === 'apps' || project.slug === 'meeting-assistant' ? 2 : 1);
   return `<div class="project-preview preview--${project.category} preview--${project.slug}" aria-hidden="true">
-    <span class="preview-label">${escape(project.gallery[0].kind)}</span>
     <div class="preview-images ${media.length > 1 ? 'preview-pair' : ''}">
       ${media.map((item) => image({ ...item, alt: '' }, './', { eager: index === 0, className: 'preview-image' })).join('\n')}
     </div>
-    <span class="preview-open">Смотреть кейс <span>↗</span></span>
   </div>`;
 }
 
@@ -141,11 +139,8 @@ function card(project, index) {
     <a class="project-card" href="./cases/${project.slug}/" aria-labelledby="title-${project.slug}">
       ${preview(project, index)}
       <div class="project-copy">
-        <div class="project-meta"><span>${escape(project.number)} / ${escape(project.categoryLabel)}</span><span class="project-arrow" aria-hidden="true">↗</span></div>
         <h3 id="title-${project.slug}">${escape(project.title)}</h3>
-        <p class="project-short">${escape(project.shortTitle)}</p>
         <p class="project-summary">${escape(project.summary)}</p>
-        <p class="project-status"><span aria-hidden="true"></span>${escape(project.status)}</p>
       </div>
     </a>
   </article>`;
@@ -159,21 +154,12 @@ function home() {
     ogImage: projects[0].gallery[0],
     body: `${header('./', true)}
     <main id="main">
-      <section class="intro wrap" aria-labelledby="intro-title">
-        <p class="eyebrow"><span class="lime-line" aria-hidden="true"></span>Портфолио / ИИ и цифровые продукты</p>
-        <h1 id="intro-title">Из повседневных задач —<br><span>в понятный процесс.</span></h1>
-        <div class="intro-bottom">
-          <p>Проекты, прототипы и примеры интерфейсов.<br>От входящего сообщения до документа, заявки и видео.</p>
-          <a class="text-link" href="#approach">Обсудить вашу задачу <span aria-hidden="true">↗</span></a>
-        </div>
-      </section>
       <section class="works wrap" id="works" aria-labelledby="works-title">
-        <div class="section-heading"><h2 id="works-title">Работы<span class="heading-count">${String(projects.length).padStart(2, '0')}</span></h2><p class="eyebrow">Сценарии · интерфейсы · результат</p></div>
+        <div class="section-heading"><h1 id="works-title">Работы</h1></div>
         <div class="work-toolbar">
           <div class="filters" role="group" aria-label="Категория работ" hidden>
-            ${categories.map(([key, label]) => `<button type="button" data-filter="${key}" aria-pressed="${key === 'all'}" aria-controls="project-grid">${label}<span>${projects.filter((project) => key === 'all' || project.category === key).length}</span></button>`).join('\n')}
+            ${categories.map(([key, label]) => `<button type="button" data-filter="${key}" aria-pressed="${key === 'all'}" aria-controls="project-grid">${label}</button>`).join('\n')}
           </div>
-          <p id="filter-result" class="work-count" role="status" aria-live="polite" aria-atomic="true">Показано: ${projects.length} из ${projects.length}</p>
         </div>
         <noscript><p class="no-script">Все работы показаны ниже. Фильтры доступны с JavaScript.</p></noscript>
         <div class="project-grid" id="project-grid">${projects.map(card).join('\n')}</div>
@@ -196,7 +182,7 @@ function lightbox() {
   return `<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title">
     <div class="lightbox-toolbar"><h2 id="lightbox-title">Просмотр изображения</h2><button type="button" data-close autofocus>Закрыть <span aria-hidden="true">×</span></button></div>
     <div class="lightbox-stage"><img class="lightbox-image" alt=""></div>
-    <div class="lightbox-bottom"><div><p id="lightbox-caption"></p><a class="original-link" href="#">Открыть оригинал <span aria-hidden="true">↗</span></a></div><div class="lightbox-navigation"><button type="button" data-prev aria-label="Предыдущее изображение">←</button><span class="lightbox-count" aria-live="polite"></span><button type="button" data-next aria-label="Следующее изображение">→</button></div></div>
+    <div class="lightbox-bottom"><a class="original-link" href="#">Открыть оригинал <span aria-hidden="true">↗</span></a><div class="lightbox-navigation"><button type="button" data-prev aria-label="Предыдущее изображение">←</button><span class="lightbox-count" aria-live="polite"></span><button type="button" data-next aria-label="Следующее изображение">→</button></div></div>
   </dialog>`;
 }
 
@@ -225,14 +211,12 @@ function detail(project, index) {
             <a class="gallery-link" href="${prefix}${escape(media.file)}" data-lightbox aria-haspopup="dialog" aria-label="Увеличить: ${escape(media.alt)}">
               ${image(media, prefix, { eager: galleryIndex === 0 })}<span class="zoom-mark" aria-hidden="true">↗</span>
             </a>
-            <figcaption><span class="media-kind">${escape(media.kind)}</span><p>${escape(media.caption)}</p></figcaption>
           </figure>`).join('\n')}
         </div>
       </section>
       <section class="case-story" aria-labelledby="story-title"><div><p class="eyebrow">Разбор проекта</p><h2 id="story-title">От задачи<br>к результату.</h2></div>
         <dl class="case-facts"><div><dt>Задача</dt><dd>${escape(project.task)}</dd></div><div><dt>На входе</dt><dd>${escape(project.input)}</dd></div><div><dt>Что происходит</dt><dd><ul>${project.actions.map((action) => `<li>${escape(action)}</li>`).join('')}</ul></dd></div><div class="output-fact"><dt>На выходе</dt><dd>${escape(project.output)}</dd></div></dl>
       </section>
-      <section class="case-process" aria-labelledby="process-title"><div class="section-heading"><h2 id="process-title">Процесс в четырех шагах</h2></div><ol class="process-flow">${project.flow.map((step, stepIndex) => `<li><span class="step-number">${String(stepIndex + 1).padStart(2, '0')}</span><p>${escape(step)}</p>${stepIndex < 3 ? '<span class="flow-arrow" aria-hidden="true">→</span>' : ''}</li>`).join('')}</ol></section>
       <nav class="case-navigation" aria-label="Другие проекты"><a href="../${previous.slug}/" rel="prev"><span class="eyebrow">← Предыдущий проект</span><strong>${escape(previous.title)}</strong></a><a href="../${next.slug}/" rel="next"><span class="eyebrow">Следующий проект →</span><strong>${escape(next.title)}</strong></a></nav>
       <div class="case-contact"><p>Хотите разобрать похожую задачу?</p><a class="text-link" href="${prefix}#approach">Как начать <span aria-hidden="true">↗</span></a></div>
     </main>

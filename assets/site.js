@@ -3,12 +3,10 @@
   if (filters) {
     const buttons = [...filters.querySelectorAll('[data-filter]')];
     const cards = [...document.querySelectorAll('.project[data-category]')];
-    const result = document.querySelector('#filter-result');
     const applyFilter = (value) => {
       const category = buttons.some((button) => button.dataset.filter === value) ? value : 'all';
       for (const button of buttons) button.setAttribute('aria-pressed', String(button.dataset.filter === category));
       for (const card of cards) card.hidden = category !== 'all' && card.dataset.category !== category;
-      result.textContent = `Показано: ${cards.filter((card) => !card.hidden).length} из ${cards.length}`;
     };
     const readFilter = () => applyFilter(new URL(window.location.href).searchParams.get('filter'));
     filters.hidden = false;
@@ -29,7 +27,6 @@
   const links = [...document.querySelectorAll('[data-lightbox]')];
   if (!dialog || !links.length || typeof dialog.showModal !== 'function') return;
   const image = dialog.querySelector('.lightbox-image');
-  const caption = dialog.querySelector('#lightbox-caption');
   const original = dialog.querySelector('.original-link');
   const count = dialog.querySelector('.lightbox-count');
   const stage = dialog.querySelector('.lightbox-stage');
@@ -43,8 +40,6 @@
     const link = links[index];
     image.src = link.href;
     image.alt = link.querySelector('img').alt;
-    const figure = link.closest('figure');
-    caption.textContent = `${figure.querySelector('.media-kind').textContent} · ${figure.querySelector('figcaption p').textContent}`;
     original.href = link.href;
     count.textContent = `${index + 1} / ${links.length}`;
     stage.scrollTop = 0;
